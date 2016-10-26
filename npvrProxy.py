@@ -2,6 +2,8 @@ from gevent import monkey; monkey.patch_all()
 
 import time
 import requests
+import hashlib
+import os
 from gevent.pywsgi import WSGIServer
 from flask import Flask, Response, request, jsonify, abort
 
@@ -11,10 +13,8 @@ app = Flask(__name__)
 config = {
     'npvrURL': 'http://localhost:8866',
     'npvrProxyURL': 'http://localhost:5004',
-    'npvrApiSid' : '',
-    'npvrApiSalt' : '',
-    'npvrApiMd5Pin' : '',
-    'npvrApiClientKey' : '',
+    'npvrPIN' : '',
+    'npvrSID' : '',
     'tunerCount': 2,  # number of tuners in npvr
     'npvrWeight': 300,  # subscription priority
     'chunkSize': 1024*1024  # usually you don't need to edit this
@@ -41,8 +41,8 @@ def status():
     return jsonify({
         'ScanInProgress': 0,
         'ScanPossible': 1,
-        'Source': "Cable",
-        'SourceList': ['Cable']
+        'Source': "Antenna",
+        'SourceList': ['Antenna']
     })
 
 
@@ -88,17 +88,58 @@ def stream(channel):
 
         return Response(generate(), content_type=req.headers['content-type'], direct_passthrough=True)
 
-
 def _get_channels():
-    url = '%s/public/GuideService/Channels?sid=%s' % (config['npvrURL'], config['npvrApiSid'])
-
+    _check_sid()
+    
     try:
+        url = '%s/public/GuideService/Channels?sid=%s' % (config['npvrURL'], config['npvrSID'])
         r = requests.get(url)
         return r.json()['channelsJSONObject']['Channels']
 
     except Exception as e:
         print('An error occured: ' + repr(e))
 
+def _check_sid():
+    if 'sid' not in config:
+        if os.path.isfile('./sid.txt'):
+            with open('sid.txt', 'r') as text_file:
+                config['sid'] = text_file.read()
+            print 'Read SID from file.'
+        else:
+            _get_sid()
+            
+    return True
+
+def _get_sid():
+    sid = ''
+    salt = ''
+    clientKey = ''
+    
+    url = '%s/public/Util/NPVR/Client/Instantiate' % config['npvrURL']
+    
+    try:
+        j = requests.get(url).json()
+        sid = j['clientKeys']['sid']
+        salt = j['clientKeys']['salt']
+        md5PIN = hashlib.md5(config['npvrPIN']).hexdigest()
+        string = ':%s:%s' % (md5PIN, salt)
+        clientKey = hashlib.md5(string).hexdigest()
+        
+        url = '%s/public/Util/NPVR/Client/Initialize/%s?sid=%s' %(config['npvrURL'], clientKey, sid)
+        j = requests.get(url).json()
+        
+        if j['SIDValidation']['validated'] == True:
+            config['sid'] = sid
+            with open('sid.txt', 'w') as text_file:
+                text_file.write(config['sid'])
+            print 'Wrote SID to file.'
+                
+        return True
+        
+    except Exception as e:
+        print('An error occured: ' + repr(e))
+        return False
+    
 
 if __name__ == '__main__':
     http = WSGIServer(('', 5004), app.wsgi_app)
