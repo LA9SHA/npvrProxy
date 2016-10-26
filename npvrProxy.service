@@ -1,0 +1,11 @@
+[Unit]
+Description=A simple proxy for Plex and NPVR
+
+[Service]
+Environment=
+WorkingDirectory=/home/npvr/npvrProxy
+ExecStart=/home/npvr/npvrProxy/venv/bin/python /home/npvr/npvrProxy/npvrProxy.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

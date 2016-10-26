@@ -7,12 +7,16 @@ from flask import Flask, Response, request, jsonify, abort
 
 app = Flask(__name__)
 
-# URL format: <protocol>://<username>:<password>@<hostname>:<port>, example: https://test:1234@localhost:9981
+# URL format: <protocol>://<username>:<password>@<hostname>:<port>, example: https://test:1234@localhost:8866
 config = {
-    'tvhURL': 'http://test:test@localhost:9981',
-    'tvhProxyURL': 'http://localhost',
-    'tunerCount': 6,  # number of tuners in tvh
-    'tvhWeight': 300,  # subscription priority
+    'npvrURL': 'http://localhost:8866',
+    'npvrProxyURL': 'http://localhost:5004',
+    'npvrApiSid' : '',
+    'npvrApiSalt' : '',
+    'npvrApiMd5Pin' : '',
+    'npvrApiClientKey' : '',
+    'tunerCount': 2,  # number of tuners in npvr
+    'npvrWeight': 300,  # subscription priority
     'chunkSize': 1024*1024  # usually you don't need to edit this
 }
 
@@ -20,15 +24,15 @@ config = {
 @app.route('/discover.json')
 def discover():
     return jsonify({
-        'FriendlyName': 'tvhProxy',
-        'ModelNumber': 'HDTC-2US',
-        'FirmwareName': 'hdhomeruntc_atsc',
+        'FriendlyName': 'npvrProxy',
+        'ModelNumber': 'HDHR4-2DT',
+        'FirmwareName': 'hdhomerun4_dvbt',
         'TunerCount': config['tunerCount'],
         'FirmwareVersion': '20150826',
         'DeviceID': '12345678',
         'DeviceAuth': 'test1234',
-        'BaseURL': '%s' % config['tvhProxyURL'],
-        'LineupURL': '%s/lineup.json' % config['tvhProxyURL']
+        'BaseURL': '%s' % config['npvrProxyURL'],
+        'LineupURL': '%s/lineup.json' % config['npvrProxyURL']
     })
 
 
@@ -47,13 +51,13 @@ def lineup():
     lineup = []
 
     for c in _get_channels():
-        if c['enabled']:
-            url = '%s/auto/v%s' % (config['tvhProxyURL'], c['number'])
+          c = c['channel']
+          url = '%s/auto/v%s' % (config['npvrProxyURL'], c['channelNum'])
 
-            lineup.append({'GuideNumber': str(c['number']),
-                           'GuideName': c['name'],
-                           'URL': url
-                           })
+          lineup.append({'GuideNumber': str(c['channelNum']),
+                         'GuideName': c['channelName'],
+                         'URL': url
+                         })
 
     return jsonify(lineup)
 
@@ -67,10 +71,9 @@ def stream(channel):
     if not duration == 0:
         duration += time.time()
 
-    for c in _get_channels():
-        if str(c['number']) == channel:
-            url = '%s/stream/channel/%s?weight=%s' % (config['tvhURL'], c['uuid'], config['tvhWeight'])
+    url = '%s/live?channel=%s' % (config['npvrURL'], channel)
 
+    print url
     if not url:
         abort(404)
     else:
@@ -88,11 +91,11 @@ def stream(channel):
 
 
 def _get_channels():
-    url = '%s/api/channel/grid?start=0&limit=999999' % config['tvhURL']
+    url = '%s/public/GuideService/Channels?sid=%s' % (config['npvrURL'], config['npvrApiSid'])
 
     try:
         r = requests.get(url)
-        return r.json()['entries']
+        return r.json()['channelsJSONObject']['Channels']
 
     except Exception as e:
         print('An error occured: ' + repr(e))
