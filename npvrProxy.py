@@ -73,7 +73,6 @@ def stream(channel):
 
     url = '%s/live?channel=%s' % (config['npvrURL'], channel)
 
-    print url
     if not url:
         abort(404)
     else:
