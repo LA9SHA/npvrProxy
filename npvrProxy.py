@@ -71,7 +71,8 @@ def stream(channel):
     if not duration == 0:
         duration += time.time()
 
-    url = '%s/live?channel=%s' % (config['npvrURL'], channel)
+    client = 'npvrProxy-%s' % (hashlib.md5(str(time.time())).hexdigest())
+    url = '%s/live?channel=%s&client=%s' % (config['npvrURL'], channel, client)
 
     if not url:
         abort(404)
